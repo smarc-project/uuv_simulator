@@ -28,6 +28,12 @@
 #include <gazebo/physics/Collision.hh>
 #include <gazebo/physics/Shape.hh>
 
+#include <thread>
+#include "ros/ros.h"
+#include "ros/callback_queue.h"
+#include "ros/subscribe_options.h"
+#include "std_msgs/Float32.h"
+
 #define RESTORING_FORCE   "restoring_force"
 
 namespace gazebo
@@ -155,6 +161,33 @@ class BuoyantObject
   /// \brief Flag set to true if the information about the metacentric width and
   /// height is available
   protected: bool isSurfaceVessel;
+
+    /// \brief A node use for ROS transport
+    private: std::unique_ptr<ros::NodeHandle> rosNode;
+
+    /// \brief A ROS subscriber
+    private: ros::Subscriber subsPitch;
+    private: ros::Subscriber subsRoll;
+    private: ros::Subscriber subsDepth;
+
+    /// \brief A ROS callbackqueue that helps process messages
+    private: ros::CallbackQueue rosQueue;
+
+    /// \brief A thread the keeps running the rosQueue
+    private: std::thread rosQueueThread;
+
+    public: void rollCB(const std_msgs::Float32ConstPtr &_msg);
+
+    public: void pitchCB(const std_msgs::Float32ConstPtr &_msg);
+
+    public: void buoyancyCB(const std_msgs::Float32ConstPtr &_msg);
+
+    /// \brief ROS helper function that processes messages
+    private: void QueueThread();
+
+    private: gazebo::math::Vector3 CoBDisp;
+
+    private : double VBS;
 };
 }
 

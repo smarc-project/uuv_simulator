@@ -9,6 +9,9 @@ find_package(Boost REQUIRED COMPONENTS system)
 find_package(Eigen3 REQUIRED)
 find_package(Protobuf REQUIRED)
 
+find_package(roscpp REQUIRED)
+find_package(std_msgs REQUIRED)
+
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/msgs)
 
 # add_subdirectory(msgs)
@@ -59,6 +62,10 @@ include_directories(${PROJECT_SOURCE_DIR}/include
 
 link_directories(${EIGEN3_LIBRARY_DIRS} ${GAZEBO_LIBRARY_DIRS})
 
+include_directories(${roscpp_INCLUDE_DIRS})
+include_directories(${std_msgs_INCLUDE_DIRS})
+
+
 ###########
 ## Build ##
 ###########
@@ -89,6 +96,7 @@ add_library(underwater_object_plugin
 target_link_libraries(underwater_object_plugin
     ${GAZEBO_LIBRARIES}
     ${EIGEN3_LIBRARIES}
+    ${roscpp_LIBRARIES}
 )
 
 add_library(thruster_plugin

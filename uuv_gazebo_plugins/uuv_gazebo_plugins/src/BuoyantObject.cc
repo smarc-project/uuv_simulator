@@ -43,6 +43,9 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->submergedHeight = 0.0;
   this->isSurfaceVessel = false;
 
+  this->CoBDisp = math::Vector3(0.0,0.0,0.0);
+  this->VBS = 0.0;
+
   this->link = _link;
   // Retrieve the bounding box
   // FIXME(mam0box) Gazebo's bounding box method is NOT working
@@ -58,10 +61,69 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   // Set neutrally buoyant flag to false
   this->neutrallyBuoyant = false;
+
+  // ROS interface
+  if (!ros::isInitialized()){
+    int argc = 0;
+    char **argv = NULL;
+    ros::init(argc, argv, "buoyancy_control",ros::init_options::NoSigintHandler);
+  }
+
+  this->rosNode.reset(new ros::NodeHandle("buoyancy_control"));
+
+  ros::SubscribeOptions subs_pitch =
+    ros::SubscribeOptions::create<std_msgs::Float32>(
+        ros::this_node::getName() + "/pitch_control",
+        1,
+        boost::bind(&BuoyantObject::pitchCB, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsPitch = this->rosNode->subscribe(subs_pitch);
+
+  ros::SubscribeOptions subs_roll =
+    ros::SubscribeOptions::create<std_msgs::Float32>(
+        ros::this_node::getName() + "/roll_control",
+        1,
+        boost::bind(&BuoyantObject::rollCB, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsRoll = this->rosNode->subscribe(subs_roll);
+
+  ros::SubscribeOptions subs_buoy =
+    ros::SubscribeOptions::create<std_msgs::Float32>(
+        ros::this_node::getName() + "/depth_control",
+        1,
+        boost::bind(&BuoyantObject::buoyancyCB, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsDepth = this->rosNode->subscribe(subs_buoy);
+
+  this->rosQueueThread = std::thread(std::bind(&BuoyantObject::QueueThread, this));
 }
 
 /////////////////////////////////////////////////
 BuoyantObject::~BuoyantObject() {}
+
+/////////////////////////////////////////////////
+void BuoyantObject::pitchCB(const std_msgs::Float32ConstPtr &_msg){
+    this->CoBDisp.y = _msg->data;
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::rollCB(const std_msgs::Float32ConstPtr &_msg){
+    this->CoBDisp.x = _msg->data;
+}
+
+void BuoyantObject::buoyancyCB(const std_msgs::Float32ConstPtr &_msg){
+    this->VBS = _msg->data;
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::QueueThread(){
+  static const double timeout = 0.01;
+  while (this->rosNode->ok())
+  {
+    this->rosQueue.callAvailable(ros::WallDuration(timeout));
+  }
+}
+
 
 /////////////////////////////////////////////////
 void BuoyantObject::SetNeutrallyBuoyant()
@@ -97,9 +159,12 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
       volume = this->volume;
     }
 
-    if (!this->neutrallyBuoyant || volume != this->volume)
+    if (!this->neutrallyBuoyant || volume != this->volume){
         buoyancyForce = math::Vector3(0, 0,
-            (volume * this->fluidDensity - this->link->GetInertial()->GetMass()) * this->g);
+            (volume * this->fluidDensity - this->VBS) * this->g);
+
+        buoyancyTorque = this->CoBDisp;
+    }
     else if (this->neutrallyBuoyant)
         buoyancyForce = math::Vector3(
             0, 0, this->link->GetInertial()->GetMass() * this->g);
@@ -162,8 +227,10 @@ void BuoyantObject::ApplyBuoyancyForce()
     "Buoyancy force is invalid");
   GZ_ASSERT(!std::isnan(buoyancyTorque.GetLength()),
     "Buoyancy torque is invalid");
-  if (!this->isSurfaceVessel)
-    this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
+  if (!this->isSurfaceVessel){
+      this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
+      this->link->AddTorque(buoyancyTorque);
+  }
   else
   {
     this->link->AddRelativeForce(buoyancyForce);
