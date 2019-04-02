@@ -185,7 +185,7 @@ class BuoyantObject
     /// \brief ROS helper function that processes messages
     private: void QueueThread();
 
-    private: gazebo::math::Vector3 CoBDisp;
+    private: gazebo::math::Vector3 LCG;
 
     private : double VBS;
 };

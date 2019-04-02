@@ -103,12 +103,12 @@ BuoyantObject::~BuoyantObject() {}
 
 /////////////////////////////////////////////////
 void BuoyantObject::pitchCB(const std_msgs::Float32ConstPtr &_msg){
-    this->CoBDisp.y = _msg->data;
+    this->LCG.y = _msg->data;
 }
 
 /////////////////////////////////////////////////
 void BuoyantObject::rollCB(const std_msgs::Float32ConstPtr &_msg){
-    this->CoBDisp.x = _msg->data;
+    this->LCG.x = _msg->data;
 }
 
 void BuoyantObject::buoyancyCB(const std_msgs::Float32ConstPtr &_msg){
@@ -163,7 +163,7 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
         buoyancyForce = math::Vector3(0, 0,
             (volume * this->fluidDensity - this->VBS) * this->g);
 
-        buoyancyTorque = this->CoBDisp;
+        buoyancyTorque = this->LCG;
     }
     else if (this->neutrallyBuoyant)
         buoyancyForce = math::Vector3(
