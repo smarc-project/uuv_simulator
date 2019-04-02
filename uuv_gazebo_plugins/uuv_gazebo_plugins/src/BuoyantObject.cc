@@ -98,10 +98,11 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
     }
 
     if (!this->neutrallyBuoyant || volume != this->volume)
-      buoyancyForce = math::Vector3(0, 0, volume * this->fluidDensity * this->g);
+        buoyancyForce = math::Vector3(0, 0,
+            (volume * this->fluidDensity - this->link->GetInertial()->GetMass()) * this->g);
     else if (this->neutrallyBuoyant)
-      buoyancyForce = math::Vector3(
-          0, 0, this->link->GetInertial()->GetMass() * this->g);
+        buoyancyForce = math::Vector3(
+            0, 0, this->link->GetInertial()->GetMass() * this->g);
   }
   else
   {
