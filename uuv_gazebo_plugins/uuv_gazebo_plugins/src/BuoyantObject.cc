@@ -43,7 +43,6 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->submergedHeight = 0.0;
   this->isSurfaceVessel = false;
 
-  this->CoBDisp = math::Vector3(0.0,0.0,0.0);
   this->VBS = 0.0;
 
   this->link = _link;
