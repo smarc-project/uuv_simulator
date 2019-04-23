@@ -79,7 +79,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   ros::SubscribeOptions subs_pitch =
     ros::SubscribeOptions::create<std_msgs::Float64>(
-        ros::this_node::getName() + "/pitch_control",
+        "/lcg_control_action",
         1,
         boost::bind(&BuoyantObject::pitchCB, this, _1),
         ros::VoidPtr(), &this->rosQueue);
@@ -87,7 +87,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   ros::SubscribeOptions subs_roll_1 =
     ros::SubscribeOptions::create<std_msgs::Float64>(
-        ros::this_node::getName() + "/roll_control",
+        "/tcg_control_action_1",
         1,
         boost::bind(&BuoyantObject::rollCB1, this, _1),
         ros::VoidPtr(), &this->rosQueue);
@@ -95,7 +95,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   ros::SubscribeOptions subs_roll_2 =
     ros::SubscribeOptions::create<std_msgs::Float64>(
-        ros::this_node::getName() + "/roll_control",
+        "/tcg_control_action_2",
         1,
         boost::bind(&BuoyantObject::rollCB2, this, _1),
         ros::VoidPtr(), &this->rosQueue);
@@ -103,7 +103,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   ros::SubscribeOptions subs_buoy =
     ros::SubscribeOptions::create<std_msgs::Float64>(
-        ros::this_node::getName() + "/depth_control",
+        "/vbs_control_action",
         1,
         boost::bind(&BuoyantObject::buoyancyCB, this, _1),
         ros::VoidPtr(), &this->rosQueue);
