@@ -32,7 +32,7 @@
 #include "ros/ros.h"
 #include "ros/callback_queue.h"
 #include "ros/subscribe_options.h"
-#include "std_msgs/Float32.h"
+#include "std_msgs/Float64.h"
 
 #define RESTORING_FORCE   "restoring_force"
 
@@ -176,11 +176,11 @@ class BuoyantObject
     /// \brief A thread the keeps running the rosQueue
     private: std::thread rosQueueThread;
 
-    public: void rollCB(const std_msgs::Float32ConstPtr &_msg);
+    public: void rollCB(const std_msgs::Float64ConstPtr &_msg);
 
-    public: void pitchCB(const std_msgs::Float32ConstPtr &_msg);
+    public: void pitchCB(const std_msgs::Float64ConstPtr &_msg);
 
-    public: void buoyancyCB(const std_msgs::Float32ConstPtr &_msg);
+    public: void buoyancyCB(const std_msgs::Float64ConstPtr &_msg);
 
     /// \brief ROS helper function that processes messages
     private: void QueueThread();

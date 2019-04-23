@@ -71,7 +71,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->rosNode.reset(new ros::NodeHandle("buoyancy_control"));
 
   ros::SubscribeOptions subs_pitch =
-    ros::SubscribeOptions::create<std_msgs::Float32>(
+    ros::SubscribeOptions::create<std_msgs::Float64>(
         ros::this_node::getName() + "/pitch_control",
         1,
         boost::bind(&BuoyantObject::pitchCB, this, _1),
@@ -79,7 +79,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->subsPitch = this->rosNode->subscribe(subs_pitch);
 
   ros::SubscribeOptions subs_roll =
-    ros::SubscribeOptions::create<std_msgs::Float32>(
+    ros::SubscribeOptions::create<std_msgs::Float64>(
         ros::this_node::getName() + "/roll_control",
         1,
         boost::bind(&BuoyantObject::rollCB, this, _1),
@@ -87,7 +87,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->subsRoll = this->rosNode->subscribe(subs_roll);
 
   ros::SubscribeOptions subs_buoy =
-    ros::SubscribeOptions::create<std_msgs::Float32>(
+    ros::SubscribeOptions::create<std_msgs::Float64>(
         ros::this_node::getName() + "/depth_control",
         1,
         boost::bind(&BuoyantObject::buoyancyCB, this, _1),
@@ -101,16 +101,16 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 BuoyantObject::~BuoyantObject() {}
 
 /////////////////////////////////////////////////
-void BuoyantObject::pitchCB(const std_msgs::Float32ConstPtr &_msg){
+void BuoyantObject::pitchCB(const std_msgs::Float64ConstPtr &_msg){
     this->LCG.y = _msg->data;
 }
 
 /////////////////////////////////////////////////
-void BuoyantObject::rollCB(const std_msgs::Float32ConstPtr &_msg){
+void BuoyantObject::rollCB(const std_msgs::Float64ConstPtr &_msg){
     this->LCG.x = _msg->data;
 }
 
-void BuoyantObject::buoyancyCB(const std_msgs::Float32ConstPtr &_msg){
+void BuoyantObject::buoyancyCB(const std_msgs::Float64ConstPtr &_msg){
     this->VBS = _msg->data;
 }
 
@@ -161,8 +161,6 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
     if (!this->neutrallyBuoyant || volume != this->volume){
         buoyancyForce = math::Vector3(0, 0,
             (volume * this->fluidDensity - this->VBS) * this->g);
-
-        buoyancyTorque = this->LCG;
     }
     else if (this->neutrallyBuoyant)
         buoyancyForce = math::Vector3(
@@ -226,6 +224,9 @@ void BuoyantObject::ApplyBuoyancyForce()
     "Buoyancy force is invalid");
   GZ_ASSERT(!std::isnan(buoyancyTorque.GetLength()),
     "Buoyancy torque is invalid");
+  buoyancyTorque = this->LCG;
+
+
   if (!this->isSurfaceVessel){
       this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
       this->link->AddTorque(buoyancyTorque);
