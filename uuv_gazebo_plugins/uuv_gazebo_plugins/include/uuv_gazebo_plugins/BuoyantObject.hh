@@ -167,7 +167,8 @@ class BuoyantObject
 
     /// \brief A ROS subscriber
     private: ros::Subscriber subsPitch;
-    private: ros::Subscriber subsRoll;
+    private: ros::Subscriber subsRoll1;
+    private: ros::Subscriber subsRoll2;
     private: ros::Subscriber subsDepth;
 
     /// \brief A ROS callbackqueue that helps process messages
@@ -176,7 +177,9 @@ class BuoyantObject
     /// \brief A thread the keeps running the rosQueue
     private: std::thread rosQueueThread;
 
-    public: void rollCB(const std_msgs::Float64ConstPtr &_msg);
+    public: void rollCB1(const std_msgs::Float64ConstPtr &_msg);
+
+    public: void rollCB2(const std_msgs::Float64ConstPtr &_msg);
 
     public: void pitchCB(const std_msgs::Float64ConstPtr &_msg);
 
@@ -185,9 +188,22 @@ class BuoyantObject
     /// \brief ROS helper function that processes messages
     private: void QueueThread();
 
-    private: gazebo::math::Vector3 LCG;
+
+    private : double LCG_pitch_d_max;
+
+    private : double LCG_pitch_mass;
 
     private : double VBS;
+
+    private: double LCG;
+
+    private: math::Vector2d TCG;
+
+    private : double VBS_capacity;
+
+    private: double TCG_radius;
+
+    private: double TCG_mass;
 };
 }
 

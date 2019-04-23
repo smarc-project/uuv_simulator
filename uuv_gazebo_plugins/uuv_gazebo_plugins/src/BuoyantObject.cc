@@ -43,7 +43,14 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->submergedHeight = 0.0;
   this->isSurfaceVessel = false;
 
+  // Buoyancy and orientation controls
   this->VBS = 0.0;
+  this->LCG = 0.0;
+  this->LCG_pitch_d_max = 0.06;
+  this->LCG_pitch_mass = 2.6;
+  this->VBS_capacity = 0.3;
+  this->TCG_radius = 0.0294;
+  this->TCG_mass = 0.22;
 
   this->link = _link;
   // Retrieve the bounding box
@@ -78,13 +85,21 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
         ros::VoidPtr(), &this->rosQueue);
   this->subsPitch = this->rosNode->subscribe(subs_pitch);
 
-  ros::SubscribeOptions subs_roll =
+  ros::SubscribeOptions subs_roll_1 =
     ros::SubscribeOptions::create<std_msgs::Float64>(
         ros::this_node::getName() + "/roll_control",
         1,
-        boost::bind(&BuoyantObject::rollCB, this, _1),
+        boost::bind(&BuoyantObject::rollCB1, this, _1),
         ros::VoidPtr(), &this->rosQueue);
-  this->subsRoll = this->rosNode->subscribe(subs_roll);
+  this->subsRoll1 = this->rosNode->subscribe(subs_roll_1);
+
+  ros::SubscribeOptions subs_roll_2 =
+    ros::SubscribeOptions::create<std_msgs::Float64>(
+        ros::this_node::getName() + "/roll_control",
+        1,
+        boost::bind(&BuoyantObject::rollCB2, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsRoll2 = this->rosNode->subscribe(subs_roll_2);
 
   ros::SubscribeOptions subs_buoy =
     ros::SubscribeOptions::create<std_msgs::Float64>(
@@ -102,16 +117,41 @@ BuoyantObject::~BuoyantObject() {}
 
 /////////////////////////////////////////////////
 void BuoyantObject::pitchCB(const std_msgs::Float64ConstPtr &_msg){
-    this->LCG.y = _msg->data;
+    /// Pitch control input \in [0,100]:
+    /// input maps to the distance the LCG mass is moved wrt the CoM of the vehicle to produce a torque
+    /// input = 50 == no distance
+    /// input = 0 == d_max/2
+    /// input = 100 == - d_max/2
+
+    const math::Pose pose = this->link->GetWorldPose();
+    double distance_mass = -1 * (_msg->data - 50) * this->LCG_pitch_d_max / 100;
+    this->LCG = distance_mass * cos(pose.rot.GetAsEuler().y) * this->LCG_pitch_mass * this->g;
 }
 
 /////////////////////////////////////////////////
-void BuoyantObject::rollCB(const std_msgs::Float64ConstPtr &_msg){
-    this->LCG.x = _msg->data;
+void BuoyantObject::rollCB1(const std_msgs::Float64ConstPtr &_msg){
+
+    /// Roll control, input 1 \in [-pi, pi]
+    const math::Pose pose = this->link->GetWorldPose();
+    this->TCG.x = (sin(_msg->data + pose.rot.GetAsEuler().x) *
+                   this->TCG_radius * this->TCG_mass * this->g);
 }
 
+/////////////////////////////////////////////////
+void BuoyantObject::rollCB2(const std_msgs::Float64ConstPtr &_msg){
+
+    /// Roll control, input 2 \in [-pi, pi]
+    const math::Pose pose = this->link->GetWorldPose();
+    this->TCG.y = (sin(_msg->data + pose.rot.GetAsEuler().x) *
+                   this->TCG_radius * this->TCG_mass * this->g);
+}
+
+/////////////////////////////////////////////////
 void BuoyantObject::buoyancyCB(const std_msgs::Float64ConstPtr &_msg){
-    this->VBS = _msg->data;
+    /// Buoyancy control input \in [0,100]
+    /// VBS_capacity is the volume of the VBS in SAM (0,3l)
+
+    this->VBS = (_msg->data * this->VBS_capacity * this->fluidDensity) / 100;
 }
 
 /////////////////////////////////////////////////
@@ -161,6 +201,7 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
     if (!this->neutrallyBuoyant || volume != this->volume){
         buoyancyForce = math::Vector3(0, 0,
             (volume * this->fluidDensity - this->VBS) * this->g);
+        buoyancyTorque = math::Vector3(this->TCG.x + this->TCG.y, this->LCG, 0);
     }
     else if (this->neutrallyBuoyant)
         buoyancyForce = math::Vector3(
@@ -224,8 +265,6 @@ void BuoyantObject::ApplyBuoyancyForce()
     "Buoyancy force is invalid");
   GZ_ASSERT(!std::isnan(buoyancyTorque.GetLength()),
     "Buoyancy torque is invalid");
-  buoyancyTorque = this->LCG;
-
 
   if (!this->isSurfaceVessel){
       this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
