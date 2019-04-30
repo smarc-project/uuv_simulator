@@ -170,6 +170,10 @@ class BuoyantObject
     private: ros::Subscriber subsRoll1;
     private: ros::Subscriber subsRoll2;
     private: ros::Subscriber subsDepth;
+    private: ros::Publisher pubLCG;
+    private: ros::Publisher pubVBS;
+    private: ros::Publisher pubTCG1;
+    private: ros::Publisher pubTCG2;
 
     /// \brief A ROS callbackqueue that helps process messages
     private: ros::CallbackQueue rosQueue;

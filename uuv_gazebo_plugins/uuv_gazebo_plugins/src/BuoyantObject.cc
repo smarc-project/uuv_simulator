@@ -46,9 +46,9 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   // Buoyancy and orientation controls
   this->VBS = 0.0;
   this->LCG = 0.0;
-  this->LCG_pitch_d_max = 0.06;
+  this->LCG_pitch_d_max = 0.3;
   this->LCG_pitch_mass = 2.6;
-  this->VBS_capacity = 0.3;
+  this->VBS_capacity = 0.0006;
   this->TCG_radius = 0.0294;
   this->TCG_mass = 0.22;
 
@@ -109,6 +109,11 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
         ros::VoidPtr(), &this->rosQueue);
   this->subsDepth = this->rosNode->subscribe(subs_buoy);
 
+  pubVBS = this->rosNode->advertise<std_msgs::Float64>("/vbs_setpoin_feedback", 1, true);
+  pubLCG = this->rosNode->advertise<std_msgs::Float64>("/lcg_setpoin_feedback", 1, true);
+  pubTCG1 = this->rosNode->advertise<std_msgs::Float64>("/tcg_setpoin_feedback_1", 1, true);
+  pubTCG2 = this->rosNode->advertise<std_msgs::Float64>("/tcg_setpoin_feedback_2", 1, true);
+
   this->rosQueueThread = std::thread(std::bind(&BuoyantObject::QueueThread, this));
 }
 
@@ -124,8 +129,10 @@ void BuoyantObject::pitchCB(const std_msgs::Float64ConstPtr &_msg){
     /// input = 100 == - d_max/2
 
     const math::Pose pose = this->link->GetWorldPose();
-    double distance_mass = -1 * (_msg->data - 50) * this->LCG_pitch_d_max / 100;
-    this->LCG = distance_mass * cos(pose.rot.GetAsEuler().y) * this->LCG_pitch_mass * this->g;
+    double distance_mass = (_msg->data - 50) * this->LCG_pitch_d_max / 100;
+    double x = pose.rot.GetXAxis().x;
+    double y = pose.rot.GetXAxis().y;
+    this->LCG = distance_mass * std::sqrt(x*x + y*y) * this->LCG_pitch_mass * this->g;
 }
 
 /////////////////////////////////////////////////
@@ -133,7 +140,7 @@ void BuoyantObject::rollCB1(const std_msgs::Float64ConstPtr &_msg){
 
     /// Roll control, input 1 \in [-pi, pi]
     const math::Pose pose = this->link->GetWorldPose();
-    this->TCG.x = (sin(_msg->data + pose.rot.GetAsEuler().x) *
+    this->TCG.x = (sin(_msg->data + pose.rot.GetAsEuler().y) *
                    this->TCG_radius * this->TCG_mass * this->g);
 }
 
@@ -142,7 +149,7 @@ void BuoyantObject::rollCB2(const std_msgs::Float64ConstPtr &_msg){
 
     /// Roll control, input 2 \in [-pi, pi]
     const math::Pose pose = this->link->GetWorldPose();
-    this->TCG.y = (sin(_msg->data + pose.rot.GetAsEuler().x) *
+    this->TCG.y = (sin(_msg->data + pose.rot.GetAsEuler().y) *
                    this->TCG_radius * this->TCG_mass * this->g);
 }
 
@@ -268,13 +275,27 @@ void BuoyantObject::ApplyBuoyancyForce()
 
   if (!this->isSurfaceVessel){
       this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
-      this->link->AddTorque(buoyancyTorque);
+      this->link->AddRelativeTorque(buoyancyTorque);
   }
   else
   {
     this->link->AddRelativeForce(buoyancyForce);
     this->link->AddRelativeTorque(buoyancyTorque);
   }
+
+//  // Send feedback
+//  std_msgs::Float64 lcg_setpoint;
+//  lcg_setpoint.data = buoyancyTorque.y;
+//  pubLCG.publish(lcg_setpoint);
+
+//  std_msgs::Float64 vbs_setpoint;
+//  vbs_setpoint.data = buoyancyTorque.y;
+//  pubVBS.publish(vbs_setpoint);
+
+//  std_msgs::Float64 tcg_setpoint;
+//  tcg_setpoint.data = buoyancyTorque.y;
+//  pubVBS.publish(vbs_setpoint);
+
 
 }
 
