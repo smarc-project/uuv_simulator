@@ -43,6 +43,15 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->submergedHeight = 0.0;
   this->isSurfaceVessel = false;
 
+  // Buoyancy and orientation controls
+  this->VBS = 0.0;
+  this->LCG = 0.0;
+  this->LCG_pitch_d_max = 0.3;
+  this->LCG_pitch_mass = 2.6;
+  this->VBS_capacity = 0.06; //0.0006 for SAM
+  this->TCG_radius = 0.0294;
+  this->TCG_mass = 0.22;
+
   this->link = _link;
   // Retrieve the bounding box
   // FIXME(mam0box) Gazebo's bounding box method is NOT working
@@ -58,10 +67,109 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
 
   // Set neutrally buoyant flag to false
   this->neutrallyBuoyant = false;
+
+  // ROS interface
+  if (!ros::isInitialized()){
+    int argc = 0;
+    char **argv = NULL;
+    ros::init(argc, argv, "buoyancy_control",ros::init_options::NoSigintHandler);
+  }
+
+  this->rosNode.reset(new ros::NodeHandle("buoyancy_control"));
+
+  ros::SubscribeOptions subs_pitch =
+    ros::SubscribeOptions::create<std_msgs::Float64>(
+        "/lcg_control_action",
+        1,
+        boost::bind(&BuoyantObject::pitchCB, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsPitch = this->rosNode->subscribe(subs_pitch);
+
+  ros::SubscribeOptions subs_roll_1 =
+    ros::SubscribeOptions::create<std_msgs::Float64>(
+        "/tcg_control_action_1",
+        1,
+        boost::bind(&BuoyantObject::rollCB1, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsRoll1 = this->rosNode->subscribe(subs_roll_1);
+
+  ros::SubscribeOptions subs_roll_2 =
+    ros::SubscribeOptions::create<std_msgs::Float64>(
+        "/tcg_control_action_2",
+        1,
+        boost::bind(&BuoyantObject::rollCB2, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsRoll2 = this->rosNode->subscribe(subs_roll_2);
+
+  ros::SubscribeOptions subs_buoy =
+    ros::SubscribeOptions::create<std_msgs::Float64>(
+        "/vbs_control_action",
+        1,
+        boost::bind(&BuoyantObject::buoyancyCB, this, _1),
+        ros::VoidPtr(), &this->rosQueue);
+  this->subsDepth = this->rosNode->subscribe(subs_buoy);
+
+  pubVBS = this->rosNode->advertise<std_msgs::Float64>("/vbs_setpoin_feedback", 1, true);
+  pubLCG = this->rosNode->advertise<std_msgs::Float64>("/lcg_setpoin_feedback", 1, true);
+  pubTCG1 = this->rosNode->advertise<std_msgs::Float64>("/tcg_setpoin_feedback_1", 1, true);
+  pubTCG2 = this->rosNode->advertise<std_msgs::Float64>("/tcg_setpoin_feedback_2", 1, true);
+
+  this->rosQueueThread = std::thread(std::bind(&BuoyantObject::QueueThread, this));
 }
 
 /////////////////////////////////////////////////
 BuoyantObject::~BuoyantObject() {}
+
+/////////////////////////////////////////////////
+void BuoyantObject::pitchCB(const std_msgs::Float64ConstPtr &_msg){
+    /// Pitch control input \in [0,100]:
+    /// input maps to the distance the LCG mass is moved wrt the CoM of the vehicle to produce a torque
+    /// input = 50 == no distance
+    /// input = 0 == d_max/2
+    /// input = 100 == - d_max/2
+
+    const math::Pose pose = this->link->GetWorldPose();
+    double distance_mass = (_msg->data - 50) * this->LCG_pitch_d_max / 100;
+    double x = pose.rot.GetXAxis().x;
+    double y = pose.rot.GetXAxis().y;
+    this->LCG = distance_mass * std::sqrt(x*x + y*y) * this->LCG_pitch_mass * this->g;
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::rollCB1(const std_msgs::Float64ConstPtr &_msg){
+
+    /// Roll control, input 1 \in [-pi, pi]
+    const math::Pose pose = this->link->GetWorldPose();
+    this->TCG.x = (sin(_msg->data + pose.rot.GetAsEuler().y) *
+                   this->TCG_radius * this->TCG_mass * this->g);
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::rollCB2(const std_msgs::Float64ConstPtr &_msg){
+
+    /// Roll control, input 2 \in [-pi, pi]
+    const math::Pose pose = this->link->GetWorldPose();
+    this->TCG.y = (sin(_msg->data + pose.rot.GetAsEuler().y) *
+                   this->TCG_radius * this->TCG_mass * this->g);
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::buoyancyCB(const std_msgs::Float64ConstPtr &_msg){
+    /// Buoyancy control input \in [0,100]
+    /// VBS_capacity is the volume of the VBS in SAM (0,3l)
+
+    this->VBS = (_msg->data * this->VBS_capacity * this->fluidDensity) / 100;
+}
+
+/////////////////////////////////////////////////
+void BuoyantObject::QueueThread(){
+  static const double timeout = 0.01;
+  while (this->rosNode->ok())
+  {
+    this->rosQueue.callAvailable(ros::WallDuration(timeout));
+  }
+}
+
 
 /////////////////////////////////////////////////
 void BuoyantObject::SetNeutrallyBuoyant()
@@ -97,11 +205,14 @@ void BuoyantObject::GetBuoyancyForce(const math::Pose &_pose,
       volume = this->volume;
     }
 
-    if (!this->neutrallyBuoyant || volume != this->volume)
-      buoyancyForce = math::Vector3(0, 0, volume * this->fluidDensity * this->g);
+    if (!this->neutrallyBuoyant || volume != this->volume){
+        buoyancyForce = math::Vector3(0, 0,
+            (volume * this->fluidDensity - this->VBS) * this->g);
+        buoyancyTorque = math::Vector3(this->TCG.x + this->TCG.y, this->LCG, 0);
+    }
     else if (this->neutrallyBuoyant)
-      buoyancyForce = math::Vector3(
-          0, 0, this->link->GetInertial()->GetMass() * this->g);
+        buoyancyForce = math::Vector3(
+            0, 0, this->link->GetInertial()->GetMass() * this->g);
   }
   else
   {
@@ -161,13 +272,30 @@ void BuoyantObject::ApplyBuoyancyForce()
     "Buoyancy force is invalid");
   GZ_ASSERT(!std::isnan(buoyancyTorque.GetLength()),
     "Buoyancy torque is invalid");
-  if (!this->isSurfaceVessel)
-    this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
+
+  if (!this->isSurfaceVessel){
+      this->link->AddForceAtRelativePosition(buoyancyForce, this->GetCoB());
+      this->link->AddRelativeTorque(buoyancyTorque);
+  }
   else
   {
     this->link->AddRelativeForce(buoyancyForce);
     this->link->AddRelativeTorque(buoyancyTorque);
   }
+
+//  // Send feedback
+//  std_msgs::Float64 lcg_setpoint;
+//  lcg_setpoint.data = buoyancyTorque.y;
+//  pubLCG.publish(lcg_setpoint);
+
+//  std_msgs::Float64 vbs_setpoint;
+//  vbs_setpoint.data = buoyancyTorque.y;
+//  pubVBS.publish(vbs_setpoint);
+
+//  std_msgs::Float64 tcg_setpoint;
+//  tcg_setpoint.data = buoyancyTorque.y;
+//  pubVBS.publish(vbs_setpoint);
+
 
 }
 

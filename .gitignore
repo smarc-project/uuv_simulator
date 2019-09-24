@@ -9,3 +9,10 @@ comparative_analysis
 best_results
 scenario_*.txt
 docs
+
+#QtCreator
+*.config
+*.creator
+*.creator.user
+*.files
+*.includes
