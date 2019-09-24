@@ -48,7 +48,7 @@ BuoyantObject::BuoyantObject(physics::LinkPtr _link)
   this->LCG = 0.0;
   this->LCG_pitch_d_max = 0.3;
   this->LCG_pitch_mass = 2.6;
-  this->VBS_capacity = 0.0006;
+  this->VBS_capacity = 0.06; //0.0006 for SAM
   this->TCG_radius = 0.0294;
   this->TCG_mass = 0.22;
 
